@@ -3,7 +3,7 @@ clc
 close all
 
 
-%% Cette experience est realisee pour une duree de 3 jours [1 janvier - 4 janvier[
+%% Cette experience est realisee pour une duree de 5 jours
 
 
 %% Problem definition 
@@ -49,7 +49,7 @@ s2 = (6*3.5) * 2;
 s3 = (4*3.5) * 2;
 s = s1 + s2 + s3;
 R = e * k/s ;
-R = R*1;
+R = R*0.8;
 % Ppv : Production panneaux photovoltaiques 
 PvProduction = data(:, 2); PvProduction = PvProduction * 1000;
 % Radiation solaire 
@@ -61,7 +61,7 @@ cpf = (4.19/3.6);
 
 %% Some variables for Mpc
 Ts = 0.2;
-P = 8;
+P = 5;
 m = 3;
 Tstop = 24*jour;
 
@@ -69,7 +69,7 @@ time = (0 : Ts : (Tstop)-Ts);
 
 % Reference definition
 r = N/2;
-r = 23 *r;
+r = 19 *r;
 % r(length(time)+1:end)= [];
 
 %% time manipulation for variables
@@ -101,32 +101,39 @@ for i = 1 : length(AmbianTemperature)
 end
 
 
+%% Normaliser les unités
+PvProduction = PvProduction / 1000; %% Pour avoir les KW
+
 %% entities declaration
 A  = (-(1/M)*mpump)-1/(M*c*R);
 B  = (1/M)*mpump;
 C  = 1;
 Bd = [1/(M*c*R) Sf/M*c Sf/M*c Sf/M*c Sf/M*c Q/M*c];
 B = [B Bd];
-D = 0;
+D = zeros(1, 7);
 model = ss(A,B,C,D);
 
 %% controller definition
+
+temperatureMaxDuHeater = 34;
 
 model = setmpcsignals(model, 'MV', 1, 'MD', 2:7);
 mpc1v2 = mpc(model, Ts, P, m);
 % load('mpc1v2.mat');
 mpc1v2.Weights.OutputVariables = 10;
 mpc1v2.Weights.ECR = 1000;
-mpc1v2.Weights.ManipulatedVariables = 0.05;
-mpc1v2.Weights.ManipulatedVariablesRate = 0.1;
+mpc1v2.Weights.ManipulatedVariables = 0.1;
+mpc1v2.Weights.ManipulatedVariablesRate = 0.2;
 
-mpc1v2.ManipulatedVariables.Min = 0;
-mpc1v2.ManipulatedVariables.RateMin = -4;
-mpc1v2.ManipulatedVariables.Max = 50; % A voir si on peut tolrere une telle température
-mpc1v2.ManipulatedVariables.RateMax = 4;
+mpc1v2.ManipulatedVariables.Min = AmbianTemperature;
+% mpc1v2.ManipulatedVariables.RateMin = -(temperatureMaxDuHeater/5);
+mpc1v2.ManipulatedVariables.RateMin = -6;
+mpc1v2.ManipulatedVariables.Max = temperatureMaxDuHeater; % A voir si on peut tolrere une telle température
+% mpc1v2.ManipulatedVariables.RateMax = (temperatureMaxDuHeater/5);
+mpc1v2.ManipulatedVariables.RateMax = 6;
 mpc1v2.ManipulatedVariables.ScaleFactor = 60;
 
-mpc1v2.OutputVariables.Min = 10;
+mpc1v2.OutputVariables.Min = -Inf;
 mpc1v2.OutputVariables.MinECR = 1;
 mpc1v2.OutputVariables.Max = 23.5;
 mpc1v2.OutputVariables.MaxECR = 2;
@@ -146,49 +153,116 @@ params.RefLookAhead = 'on';
 
 v1 = [zeros(length(time), 6)];
 v2 = [AmbianTemperature' SolaRadiation' SolaRadiation' SolaRadiation' SolaRadiation' N'];
-[y1, t1, u1] = sim(mpc1v2, Tstop/Ts, r',v1, params);
-[y2, t2, u2] = sim(mpc1v2, Tstop/Ts, r',v2, params);
+[Tzone1, t1, Theat1] = sim(mpc1v2, Tstop/Ts, r',v1, params);
+[Tzone2, t2, Theat2] = sim(mpc1v2, Tstop/Ts, r',v2, params);
 
 %% plot résults
-figure(1);
+figure;
+subplot(211)
 plot(t1, r, 'green')
 grid minor 
 hold on
-plot(t1, y1, 'red')
+plot(t1, Tzone1, 'red')
 hold on 
-stairs(t1, u1, 'blue')
+stairs(t1, Theat1, 'blue')
 hold on 
 plot(t1, AmbianTemperature, 'black')
-legend('référence', 'Temperature de la zone', 'temperature du heater', 'temperature ambiante')
+legend('Référence', 'Temperature de la zone', 'Temperature du heater', 'Temperature ambiante', 'FontSize', 12)
+xlabel({'Time', '(h)'})
+ylabel({'Temperature','C°'})
+set(gca,'FontSize',14)
+ylim([0 (temperatureMaxDuHeater + 5)])
 title('temperature zone, ambiante, chauffage sans disturbances')
 
-
-figure(2);
+subplot(212)
 plot(t2, r, 'green')
 grid minor 
 hold on
-plot(t2, y2, 'red')
+plot(t2, Tzone2, 'red')
 hold on 
-stairs(t2, u2, 'blue')
+stairs(t2, Theat2, 'blue')
 hold on 
 plot(t2, AmbianTemperature, 'black')
-legend('référence', 'Temperature de la zone', 'temperature du heater', 'temperature ambiante')
+legend('Référence', 'Temperature de la zone', 'Temperature du heater', 'Temperature ambiante', 'FontSize', 12)
+xlabel({'Time', '(h)'})
+ylabel({'Temperature','C°'})
+set(gca,'FontSize',14)
+ylim([0 (temperatureMaxDuHeater + 5)])
 title('temperature zone, ambiante, chauffage avec disturbances')
 
 %% Calcul de la consommation énergétique par le chauffage
-Qheat1 = mpump*cpf*u1 - AmbianTemperature';
-Qheat2 = mpump*cpf*u2 - AmbianTemperature';
+Qheat1 = mpump*cpf*(Theat1 - AmbianTemperature');
+Qheat2 = mpump*cpf*(Theat2 - AmbianTemperature');
+
+for i = 1 : length(Qheat1)
+    if Qheat1(i) < 0
+        Qheat1(i) = 0;
+    end
+    if Qheat2(i) < 0 
+        Qheat2(i) = 0;
+    end
+end
+        
 
 figure;
-plot(time, Qheat1/1000, '-.', 'LineWidth', 1.5) % on divise Qheat1 par 1000 pour la ploter en kw
+plot(time, Qheat1/1000, '-.', 'LineWidth', 1.1) % on divise Qheat1 par 1000 pour la ploter en kw
 hold on
-plot(time, Qheat2/1000, 'LineWidth', 1.1) % on divise Qheat2 par 1000 pour la ploter en kw
+plot(time, Qheat2/1000, '-.', 'LineWidth', 1.1) % on divise Qheat2 par 1000 pour la ploter en kw
+hold on 
+plot(time, PvProduction, 'green', 'LineWidth', 1.5)
 grid minor
-legend('Power consumed without disturbances', 'Power consumed with disturbances');
+legend('Power consumed without disturbances', 'Power consumed with disturbances', 'Pv Prodcution', 'FontSize', 14);
+xlabel({'Time', '(h)'})
+ylabel({'Puissance','(Kw)'})
+set(gca,'FontSize',14)
 title('Puissance instantannée consommée par le chauffage')
 
-% La puissance consommée par jour pour le chauffage est à peu pres 18 kw
-% contre 24 kw pour Trnsys
 
+
+Eheat1 = sum(Qheat1(15:end))/(5*1000);
+Eheat2 = sum(Qheat2(15:end))/(5*1000);
+
+
+%% plot résults
+figure;
+subplot(211)
+plot(t2, r, 'green')
+grid minor 
+hold on
+plot(t2, Tzone2, 'red')
+hold on 
+stairs(t2, Theat2, 'blue')
+hold on 
+plot(t2, AmbianTemperature, 'black')
+legend('Référence', 'Temperature de la zone', 'Temperature du heater', 'Temperature ambiante', 'FontSize', 12)
+xlabel({'Time', '(h)'})
+ylabel({'Temperature','C°'})
+set(gca,'FontSize',14)
+ylim([0 (temperatureMaxDuHeater + 5)])
+title('temperature zone, ambiante, chauffage avec disturbances')
+
+subplot(212)
+plot(time, Qheat2/1000, '-.', 'LineWidth', 1.1) % on divise Qheat2 par 1000 pour la ploter en kw
+hold on 
+plot(time, PvProduction, 'green', 'LineWidth', 1.5)
+grid minor
+legend('Heater power consumed', 'Pv Prodcution', 'FontSize', 14);
+xlabel({'Time', '(h)'})
+ylabel({'Puissance','(Kw)'})
+set(gca,'FontSize',14)
+title('Puissance instantannée consommée par le chauffage et production PV')
+
+%% definition of second criteria 
+% Comfort criteria
+
+% j1p1(1, :) = r(40:(11.8*5));
+% j1p1(2, :) = Tzone2(8*5:11.8*5);
+% j1p2(1, :) = r(13.2*5:18*5);
+% j1p2(2, :) = Tzone2(13.2*5:18*5);
 % 
-% %% PID Trnsys for comparison
+% figure;
+% plot(j1p2(1, :))
+% hold on 
+% plot(j1p2(2, :))
+% e1 = abs(sum(j1p1(1, :)-j1p1(2, :)))
+% e2 = abs(sum(j1p2(1, :)-j1p2(2, :)))

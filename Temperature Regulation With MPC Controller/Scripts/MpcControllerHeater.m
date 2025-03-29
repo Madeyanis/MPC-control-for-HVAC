@@ -15,7 +15,7 @@ close all
 % d = [TOut Ie Iw Is In N] les entrées non commandables mais mesurables
 
 %% Load fichier
-data = readtable('C:\Users\masdoua1\OneDrive\Research\Matlab Codes\Research\myThesis\Experience1\data.txt'); data = table2array(data);
+data = readtable('data.txt'); data = table2array(data);
 data(1, :) = [];
 %% constants definition and load data
 Volume = 84;

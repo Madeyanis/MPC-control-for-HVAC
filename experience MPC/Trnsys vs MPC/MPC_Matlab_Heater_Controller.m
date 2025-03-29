@@ -122,7 +122,7 @@ mpc1v2.Weights.ManipulatedVariablesRate = 0.1;
 
 mpc1v2.ManipulatedVariables.Min = 0;
 mpc1v2.ManipulatedVariables.RateMin = -4;
-mpc1v2.ManipulatedVariables.Max = 50; % A voir si on peut tolrere une telle température
+mpc1v2.ManipulatedVariables.Max = 40; % A voir si on peut tolrere une telle température
 mpc1v2.ManipulatedVariables.RateMax = 4;
 mpc1v2.ManipulatedVariables.ScaleFactor = 60;
 
@@ -150,7 +150,8 @@ v2 = [AmbianTemperature' SolaRadiation' SolaRadiation' SolaRadiation' SolaRadiat
 [y2, t2, u2] = sim(mpc1v2, Tstop/Ts, r',v2, params);
 
 %% plot résults
-figure(1);
+figure;
+subplot(211)
 plot(t1, r, 'green')
 grid minor 
 hold on
@@ -159,11 +160,13 @@ hold on
 stairs(t1, u1, 'blue')
 hold on 
 plot(t1, AmbianTemperature, 'black')
-legend('référence', 'Temperature de la zone', 'temperature du heater', 'temperature ambiante')
+legend('Référence', 'Temperature de la zone', 'Temperature du heater', 'Temperature ambiante', 'FontSize', 12)
+xlabel({'Time', '(h)'})
+ylabel({'Temperature','C°'})
+set(gca,'FontSize',14)
 title('temperature zone, ambiante, chauffage sans disturbances')
 
-
-figure(2);
+subplot(212)
 plot(t2, r, 'green')
 grid minor 
 hold on
@@ -172,7 +175,10 @@ hold on
 stairs(t2, u2, 'blue')
 hold on 
 plot(t2, AmbianTemperature, 'black')
-legend('référence', 'Temperature de la zone', 'temperature du heater', 'temperature ambiante')
+legend('Référence', 'Temperature de la zone', 'Temperature du heater', 'Temperature ambiante', 'FontSize', 12)
+xlabel({'Time', '(h)'})
+ylabel({'Temperature','C°'})
+set(gca,'FontSize',14)
 title('temperature zone, ambiante, chauffage avec disturbances')
 
 %% Calcul de la consommation énergétique par le chauffage
@@ -182,10 +188,22 @@ Qheat2 = mpump*cpf*u2 - AmbianTemperature';
 figure;
 plot(time, Qheat1/1000, '-.', 'LineWidth', 1.5) % on divise Qheat1 par 1000 pour la ploter en kw
 hold on
-plot(time, Qheat2/1000, 'LineWidth', 1.1) % on divise Qheat2 par 1000 pour la ploter en kw
+plot(time, Qheat2/1000, '-.', 'LineWidth', 1.1) % on divise Qheat2 par 1000 pour la ploter en kw
 grid minor
-legend('Power consumed without disturbances', 'Power consumed with disturbances');
+legend('Power consumed without disturbances', 'Power consumed with disturbances', 'FontSize', 14);
+xlabel({'Time', '(h)'})
+ylabel({'Puissance','(Kw)'})
+set(gca,'FontSize',14)
 title('Puissance instantannée consommée par le chauffage')
+
+
+
+Eheat1 = 0;
+Eheat2 = 0;
+for i = 1 : 5 :length(Qheat1)
+    Eheat1 = Eheat1 + Qheat1(i);
+    Eheat2 = Eheat2 + Qheat2(i);
+end
 
 % La puissance consommée par jour pour le chauffage est à peu pres 18 kw
 % contre 24 kw pour Trnsys
